@@ -16,7 +16,7 @@
  * under the License.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import API from 'AppData/api';
 import PropTypes from 'prop-types';
 import Joi from '@hapi/joi';
@@ -34,6 +34,22 @@ const useStyles = makeStyles((theme) => ({
 }));
 
 /**
+ * Perform a task repeatedly with a given interval
+ * @param {function} callback function to be called
+ * @param {Integer} delay interval
+ */
+function useInterval(callback, delay) {
+    const savedCallback = useRef();
+    savedCallback.current = callback;
+    useEffect(() => {
+        const id = setInterval(() => {
+            savedCallback.current();
+        }, delay);
+        return () => clearInterval(id);
+    }, []);
+}
+
+/**
  * Render a pop-up dialog to add an email address
  * @param {JSON} props .
  * @returns {JSX}.
@@ -43,34 +59,52 @@ function AddEmail(props) {
         updateList, icon, triggerButtonText, title, emailList,
     } = props;
     const classes = useStyles();
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState();
+    const [validationRes, setValidationRes] = useState();
+    const [elt, setElt] = useState(0);
+    const [isValidated, setIsValidated] = useState(true);
 
     const onChange = (e) => {
         setEmail(e.target.value);
+        setIsValidated(false);
+        setElt(0);
     };
 
-    const validateEmail = (value) => {
+    const validateEmail = () => {
+        let tempValidationRes = false;
+        if (email === undefined) {
+            tempValidationRes = false;
+        }
         const schema = Joi.string().email().empty();
-        const validationError = schema.validate(value).error;
+        const validationError = schema.validate(email).error;
 
         if (validationError) {
             const errorType = validationError.details[0].type;
             if (errorType === 'any.empty') {
-                return 'Email is empty';
+                tempValidationRes = 'Email is empty';
             }
             if (errorType === 'string.email') {
-                return 'Invalid Email';
+                tempValidationRes = 'Invalid Email';
             }
         } else {
             const existingSameEmails = emailList.filter((obj) => obj.email === email);
             if (existingSameEmails.length > 0) {
-                return 'Same email exists';
+                tempValidationRes = 'Same email exists';
             } else {
-                return false;
+                tempValidationRes = false;
             }
         }
-        return false;
+        setValidationRes(tempValidationRes);
+        setIsValidated(true);
+        return tempValidationRes;
     };
+
+    useInterval(() => {
+        if (!isValidated && elt >= 800) {
+            validateEmail();
+        }
+        setElt(elt + 200);
+    }, 200);
 
     const formSaveCallback = () => {
         const validationErrors = validateEmail(email);
@@ -120,6 +154,7 @@ function AddEmail(props) {
                 name='email'
                 value={email}
                 onChange={onChange}
+                onBlur={validateEmail}
                 label={(
                     <span>
                         <FormattedMessage id='AdminPages.BotDetection.Add.form.email' defaultMessage='Email' />
@@ -127,8 +162,8 @@ function AddEmail(props) {
                     </span>
                 )}
                 fullWidth
-                error={validateEmail(email)}
-                helperText={validateEmail(email) || 'Enter Email address'}
+                error={validationRes}
+                helperText={validationRes || 'Enter Email address'}
                 variant='outlined'
             />
         </FormDialogBase>
